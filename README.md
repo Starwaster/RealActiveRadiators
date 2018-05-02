@@ -9,4 +9,6 @@ Refrigeration cost requires that the radiator config has an ElectricCharge RESOU
 
 refrigeration flux / ((part.temperature / (radiator.skinTemperature - part.temperature)) * cryoCoolerEfficiency)
 
+cryoCoolerEfficiency defaults to 0.1 and can be configured. (or upgraded via stock upgrade nodes)
+
 Refrigeration cost requires that the radiator config has an ElectricCharge RESOURCE. If there is not enough electricity then refrigeration will be scaled back accordingly. Normal radiator cooling will still occur as long as the configured resource inputs can be satisfied.
