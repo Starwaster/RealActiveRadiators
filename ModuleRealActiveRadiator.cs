@@ -12,9 +12,13 @@ namespace RealActiveRadiator
         [KSPField()]
         public float cryoCoolerEfficiency = 0.1f;
 
+        [KSPField(guiName = "AR:RefrCost", guiActive = false)]
+        public string D_RefrCost = "???";
+
         protected int electricResourceIndex = -1;
         protected double baseElectricRate = 0;
         protected double refrigerationThrottle = 1;
+        protected BaseField Dfld_RefrCost;
 
 		public ModuleRealActiveRadiator () : base()
 		{
@@ -30,12 +34,16 @@ namespace RealActiveRadiator
 
 		public override void OnStart(StartState state)
 		{
-			base.OnStart (state);			
+			base.OnStart (state);
+            this.Dfld_RefrCost = base.Fields ["D_RefrCost"];
 		}
 
 		public new void FixedUpdate()
 		{
 			base.FixedUpdate();
+
+            if (this.Dfld_RefrCost != null)
+                this.Dfld_RefrCost.guiActive = PhysicsGlobals.ThermalDataDisplay;
 		}
 
 		public override string GetInfo ()
@@ -50,7 +58,7 @@ namespace RealActiveRadiator
 
         }
 
-        protected new void InternalCooling(RadiatorData rad, int radCount)
+        protected override void InternalCooling(RadiatorData rad, int radCount)
         {
             // TODO hard coding this but I may do something like this for all resource inputs IF there are likely to be other resource inputs
             // and IF those other inputs are likely to need scaling...
@@ -90,24 +98,40 @@ namespace RealActiveRadiator
                         if (num2 > 0.0)
                         {
                             this.coolParts.Add(thermalData);
-                            if (part2.temperature <= base.part.skinTemperature)
-                            {
-                                carnotEfficiency = part2.temperature / (base.part.skinTemperature - part.temperature);
-
-                                refrigerationCost = (Math.Min(rad.EnergyCap - rad.Energy, this.maxEnergyTransfer) / (double)TimeWarp.fixedDeltaTime) / (carnotEfficiency * this.cryoCoolerEfficiency);
-                            }
                         }
                     }
                 }
             }
 
+
+            int cooledParts = this.coolParts.Count;
+            // Would have liked to do this part as coolParts was being built so the list doesn't have to be walked through twice
+            // but I don't know the amount of flux until after it's done being built - so if I want to throttle refrigeration I have to do this.
+            for (int i = 0; i < cooledParts; i++)
+            {
+                if (coolParts[i].Part.temperature <= base.part.skinTemperature)
+                {
+                    RadiatorData radiatorData = this.coolParts[i];
+                    double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy) / (double)TimeWarp.fixedDeltaTime;
+                    excessHeat /= (double)(radCount + cooledParts);
+                    double val = Math.Min(rad.EnergyCap - rad.Energy, this.maxEnergyTransfer) / (double)TimeWarp.fixedDeltaTime;
+                    double liftedHeatFlux = Math.Min(val, excessHeat) *  Math.Min(1.0, this.energyTransferScale);
+
+                    carnotEfficiency = coolParts[i].Part.temperature / (base.part.skinTemperature - coolParts[i].Part.temperature);
+                    refrigerationCost += liftedHeatFlux / (carnotEfficiency * this.cryoCoolerEfficiency);
+                }
+            }
             if (electricResourceIndex >= 0)
             {
                 this.resHandler.inputResources[electricResourceIndex].rate = baseElectricRate + refrigerationCost;
-                refrigerationThrottle = this.resHandler.UpdateModuleResourceInputs(ref this.status, 1.0, 0.9, false, true, true);
+
+				refrigerationThrottle = this.resHandler.UpdateModuleResourceInputs(ref this.status, 1.0, 0.9, false, true, true);
+                this.resHandler.inputResources[electricResourceIndex].rate = baseElectricRate + (refrigerationCost * refrigerationThrottle);
+                if (this.Dfld_RefrCost.guiActive)
+                    this.D_RefrCost = refrigerationCost.ToString("F4");
             }
-            
-            int cooledParts = this.coolParts.Count;
+
+
             if (this.Dfld_CoolParts.guiActive)
             {
                 this.D_CoolParts = StringBuilderCache.Format("{0}/{1}", new object[]
