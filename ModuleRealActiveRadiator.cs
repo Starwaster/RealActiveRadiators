@@ -10,7 +10,13 @@ namespace RealActiveRadiator
 	public class ModuleRealActiveRadiator : ModuleActiveRadiator
 	{
         [KSPField()]
-        public float cryoCoolerEfficiency = 0.1f;
+        public FloatCurve cryoCoolerEfficiency;
+
+        [KSPField]
+        public double maxCryoEnergyTransfer = 500.0;
+
+        [KSPField]
+        public double maxCryoElectricCost = 10;
 
         [KSPField(guiName = "AR:RefrCost", guiActive = false)]
         public string D_RefrCost = "???";
@@ -30,6 +36,10 @@ namespace RealActiveRadiator
             electricResourceIndex = this.resHandler.inputResources.FindIndex(x => x.name == "ElectricCharge");
             if (electricResourceIndex >= 0)
                 baseElectricRate = this.resHandler.inputResources[electricResourceIndex].rate;
+            if (cryoCoolerEfficiency == null)
+                cryoCoolerEfficiency = new FloatCurve();
+            if (cryoCoolerEfficiency.Curve.keys.Length == 0)
+                cryoCoolerEfficiency.Add(0f, 0.7f);
 		}
 
 		public override void OnStart(StartState state)
@@ -62,7 +72,8 @@ namespace RealActiveRadiator
         {
             // TODO hard coding this but I may do something like this for all resource inputs IF there are likely to be other resource inputs
             // and IF those other inputs are likely to need scaling...
-            double carnotEfficiency = 0;
+            double carnotEfficiency = 1;
+            double cryoEfficiency = 1;
             double refrigerationCost = 0;
             if (this.Dfld_RadCount.guiActive)
             {
@@ -109,24 +120,31 @@ namespace RealActiveRadiator
             // but I don't know the amount of flux until after it's done being built - so if I want to throttle refrigeration I have to do this.
             for (int i = 0; i < cooledParts; i++)
             {
-                if (coolParts[i].Part.temperature <= base.part.skinTemperature)
+                if (coolParts[i].Part.temperature < base.part.skinTemperature)
                 {
                     RadiatorData radiatorData = this.coolParts[i];
+                    carnotEfficiency = coolParts[i].Part.temperature / (base.part.skinTemperature - coolParts[i].Part.temperature);
+                    cryoEfficiency = this.cryoCoolerEfficiency.Evaluate((float)coolParts[i].Part.temperature);
+                    double _maxCryoEnergyTransfer = maxCryoElectricCost * carnotEfficiency * cryoEfficiency * 50;
                     double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy) / (double)TimeWarp.fixedDeltaTime;
                     excessHeat /= (double)(radCount + cooledParts);
-                    double val = Math.Min(rad.EnergyCap - rad.Energy, this.maxEnergyTransfer) / (double)TimeWarp.fixedDeltaTime;
-                    double liftedHeatFlux = Math.Min(val, excessHeat) *  Math.Min(1.0, this.energyTransferScale);
+                    double val = Math.Min(rad.EnergyCap - rad.Energy, _maxCryoEnergyTransfer) / (double)TimeWarp.fixedDeltaTime;
+                    double liftedHeatFlux = Math.Min(val, excessHeat) * Math.Min(1.0, this.energyTransferScale);
 
-                    carnotEfficiency = coolParts[i].Part.temperature / (base.part.skinTemperature - coolParts[i].Part.temperature);
-                    refrigerationCost += liftedHeatFlux / (carnotEfficiency * this.cryoCoolerEfficiency);
+                    refrigerationCost += Math.Min(maxCryoElectricCost, liftedHeatFlux / (carnotEfficiency * cryoEfficiency));
                 }
             }
             if (electricResourceIndex >= 0)
             {
                 this.resHandler.inputResources[electricResourceIndex].rate = baseElectricRate + refrigerationCost;
 
-				refrigerationThrottle = this.resHandler.UpdateModuleResourceInputs(ref this.status, 1.0, 0.9, false, true, true);
-                this.resHandler.inputResources[electricResourceIndex].rate = baseElectricRate + (refrigerationCost * refrigerationThrottle);
+                refrigerationThrottle = this.resHandler.UpdateModuleResourceInputs(ref this.status, 1.0, 0.9, false, true, true);
+                if (refrigerationThrottle < 1.0)
+                {
+                    refrigerationThrottle *= 0.90;
+                    refrigerationCost *= refrigerationThrottle;
+                    this.resHandler.inputResources[electricResourceIndex].rate = baseElectricRate + (refrigerationCost);
+                }
                 if (this.Dfld_RefrCost.guiActive)
                     this.D_RefrCost = refrigerationCost.ToString("F4");
             }
@@ -143,9 +161,13 @@ namespace RealActiveRadiator
             for (int j = 0; j < cooledParts; j++)
             {
                 RadiatorData radiatorData = this.coolParts[j];
+                carnotEfficiency = coolParts[j].Part.temperature / (base.part.skinTemperature - coolParts[j].Part.temperature);
+                cryoEfficiency = this.cryoCoolerEfficiency.Evaluate((float)coolParts [j].Part.temperature);
+                double _maxCryoEnergyTransfer = maxCryoElectricCost * carnotEfficiency * cryoEfficiency * 50;
                 double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy) / (double)TimeWarp.fixedDeltaTime;
                 excessHeat /= (double)(radCount + cooledParts);
-                double val = Math.Min(rad.EnergyCap - rad.Energy, this.maxEnergyTransfer) / (double)TimeWarp.fixedDeltaTime;
+                double _maxEnergyTransfer = radiatorData.Part.temperature >= base.part.skinTemperature ? this.maxEnergyTransfer : _maxCryoEnergyTransfer;
+                double val = Math.Min(rad.EnergyCap - rad.Energy, _maxEnergyTransfer) / (double)TimeWarp.fixedDeltaTime;
                 double liftedHeatFlux = Math.Min(val, excessHeat);
                 if (this.Dfld_XferBase.guiActive)
                 {
@@ -153,7 +175,7 @@ namespace RealActiveRadiator
                 }
                 liftedHeatFlux *= Math.Min(1.0, this.energyTransferScale);
 
-                if (radiatorData.Part.temperature <= base.part.skinTemperature)
+                if (radiatorData.Part.temperature < base.part.skinTemperature)
                     liftedHeatFlux *= refrigerationThrottle;
                 
                 if (liftedHeatFlux > 0.0 && !base.vessel.IsFirstFrame())
