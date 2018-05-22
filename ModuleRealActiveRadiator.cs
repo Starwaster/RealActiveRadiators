@@ -56,10 +56,26 @@ namespace RealActiveRadiator
                 this.Dfld_RefrCost.guiActive = PhysicsGlobals.ThermalDataDisplay;
 		}
 
-		public override string GetInfo ()
-		{
-            return base.GetInfo();
-		}
+        public override string GetInfo()
+        {
+            string info = base.GetInfo();
+            string cryoInfo = "";
+
+            if (maxCryoElectricCost > 0)
+            {
+                cryoInfo = "\n<b><color=#99ff00ff>Max Cryogenic Cooling</color></b>\n";
+                cryoInfo += " <b><color=#00C3FFff>@20K = " + (CoolingEfficiency(20, 300) * maxCryoElectricCost).ToString("F2") + "</color>\n";
+                cryoInfo += " <b><color=#00C3FFff>@90K = " + (CoolingEfficiency(90, 300) * maxCryoElectricCost).ToString("F2") + "</color>\n";
+            }
+            else
+            {
+                cryoInfo = "No cryogenic cooling capacity.\n";
+            }
+
+            return info + cryoInfo;
+
+        }
+
 
         protected void AdjustResourceRates()
         {
@@ -68,12 +84,21 @@ namespace RealActiveRadiator
 
         }
 
+        //<summary>
+        // Returns the % of Carnot Efficiency of the cryocooler.
+        //</summary>
+        public double CoolingEfficiency(double coolingTemp, double hotTemp)
+        {
+            return coolingTemp / (hotTemp - coolingTemp) * cryoCoolerEfficiency.Evaluate((float)coolingTemp);
+        }
+
+
+
         protected override void InternalCooling(RadiatorData rad, int radCount)
         {
-            // TODO hard coding this but I may do something like this for all resource inputs IF there are likely to be other resource inputs
+            // TODO hard coding this for ElectricCharge but I may do something like this for all resource inputs IF there are likely to be other resource inputs
             // and IF those other inputs are likely to need scaling...
-            double carnotEfficiency = 1;
-            double cryoEfficiency = 1;
+            double coolingEfficiency = 1;
             double refrigerationCost = 0;
             if (this.Dfld_RadCount.guiActive)
             {
@@ -114,7 +139,6 @@ namespace RealActiveRadiator
                 }
             }
 
-
             int cooledParts = this.coolParts.Count;
             // Would have liked to do this part as coolParts was being built so the list doesn't have to be walked through twice
             // but I don't know the amount of flux until after it's done being built - so if I want to throttle refrigeration I have to do this.
@@ -123,15 +147,14 @@ namespace RealActiveRadiator
                 if (coolParts[i].Part.temperature < base.part.skinTemperature)
                 {
                     RadiatorData radiatorData = this.coolParts[i];
-                    carnotEfficiency = coolParts[i].Part.temperature / (base.part.skinTemperature - coolParts[i].Part.temperature);
-                    cryoEfficiency = this.cryoCoolerEfficiency.Evaluate((float)coolParts[i].Part.temperature);
-                    double _maxCryoEnergyTransfer = maxCryoElectricCost * carnotEfficiency * cryoEfficiency * 50;
+                    coolingEfficiency = CoolingEfficiency(coolParts[i].Part.temperature, base.part.skinTemperature);
+                    double _maxCryoEnergyTransfer = maxCryoElectricCost * coolingEfficiency;
                     double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy) / (double)TimeWarp.fixedDeltaTime;
                     excessHeat /= (double)(radCount + cooledParts);
                     double val = Math.Min(rad.EnergyCap - rad.Energy, _maxCryoEnergyTransfer) / (double)TimeWarp.fixedDeltaTime;
                     double liftedHeatFlux = Math.Min(val, excessHeat) * Math.Min(1.0, this.energyTransferScale);
 
-                    refrigerationCost += Math.Min(maxCryoElectricCost, liftedHeatFlux / (carnotEfficiency * cryoEfficiency));
+                    refrigerationCost += Math.Min(maxCryoElectricCost, liftedHeatFlux / coolingEfficiency);
                 }
             }
             if (electricResourceIndex >= 0)
@@ -161,9 +184,8 @@ namespace RealActiveRadiator
             for (int j = 0; j < cooledParts; j++)
             {
                 RadiatorData radiatorData = this.coolParts[j];
-                carnotEfficiency = coolParts[j].Part.temperature / (base.part.skinTemperature - coolParts[j].Part.temperature);
-                cryoEfficiency = this.cryoCoolerEfficiency.Evaluate((float)coolParts [j].Part.temperature);
-                double _maxCryoEnergyTransfer = maxCryoElectricCost * carnotEfficiency * cryoEfficiency * 50;
+                coolingEfficiency = CoolingEfficiency(coolParts[j].Part.temperature, base.part.skinTemperature);
+                double _maxCryoEnergyTransfer = maxCryoElectricCost * coolingEfficiency;
                 double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy) / (double)TimeWarp.fixedDeltaTime;
                 excessHeat /= (double)(radCount + cooledParts);
                 double _maxEnergyTransfer = radiatorData.Part.temperature >= base.part.skinTemperature ? this.maxEnergyTransfer : _maxCryoEnergyTransfer;
