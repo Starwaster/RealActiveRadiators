@@ -64,8 +64,8 @@ namespace RealActiveRadiator
             if (maxCryoElectricCost > 0)
             {
                 cryoInfo = "\n<b><color=#99ff00ff>Max Cryogenic Cooling</color></b>\n";
-                cryoInfo += " <b><color=#00C3FFff>@20K = " + (CoolingEfficiency(20, 300) * maxCryoElectricCost).ToString("F2") + "</color>\n";
-                cryoInfo += " <b><color=#00C3FFff>@90K = " + (CoolingEfficiency(90, 300) * maxCryoElectricCost).ToString("F2") + "</color>\n";
+                cryoInfo += " <b><color=#00C3FFff>@20K = " + (CoolingEfficiency(20, 300) * maxCryoElectricCost).ToString("F2") + "kW" + "</color>\n";
+                cryoInfo += " <b><color=#00C3FFff>@90K = " + (CoolingEfficiency(90, 300) * maxCryoElectricCost).ToString("F2") + "kW" + "</color>\n";
             }
             else
             {
@@ -149,9 +149,9 @@ namespace RealActiveRadiator
                     RadiatorData radiatorData = this.coolParts[i];
                     coolingEfficiency = CoolingEfficiency(coolParts[i].Part.temperature, base.part.skinTemperature);
                     double _maxCryoEnergyTransfer = maxCryoElectricCost * coolingEfficiency;
-                    double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy) / (double)TimeWarp.fixedDeltaTime;
+                    double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy);
                     excessHeat /= (double)(radCount + cooledParts);
-                    double val = Math.Min(rad.EnergyCap - rad.Energy, _maxCryoEnergyTransfer) / (double)TimeWarp.fixedDeltaTime;
+                    double val = Math.Min(rad.EnergyCap - rad.Energy, _maxCryoEnergyTransfer);
                     double liftedHeatFlux = Math.Min(val, excessHeat) * Math.Min(1.0, this.energyTransferScale);
 
                     refrigerationCost += Math.Min(maxCryoElectricCost, liftedHeatFlux / coolingEfficiency);
@@ -186,10 +186,10 @@ namespace RealActiveRadiator
                 RadiatorData radiatorData = this.coolParts[j];
                 coolingEfficiency = CoolingEfficiency(coolParts[j].Part.temperature, base.part.skinTemperature);
                 double _maxCryoEnergyTransfer = maxCryoElectricCost * coolingEfficiency;
-                double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy) / (double)TimeWarp.fixedDeltaTime;
+                double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy);
                 excessHeat /= (double)(radCount + cooledParts);
                 double _maxEnergyTransfer = radiatorData.Part.temperature >= base.part.skinTemperature ? this.maxEnergyTransfer : _maxCryoEnergyTransfer;
-                double val = Math.Min(rad.EnergyCap - rad.Energy, _maxEnergyTransfer) / (double)TimeWarp.fixedDeltaTime;
+                double val = Math.Min(rad.EnergyCap - rad.Energy, _maxEnergyTransfer);
                 double liftedHeatFlux = Math.Min(val, excessHeat);
                 if (this.Dfld_XferBase.guiActive)
                 {
