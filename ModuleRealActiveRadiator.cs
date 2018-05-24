@@ -18,6 +18,9 @@ namespace RealActiveRadiator
         [KSPField]
         public double maxCryoElectricCost = 10;
 
+        [KSPField]
+        public double cryoEnergyTransferScale = 1;
+
         [KSPField(guiName = "AR:RefrCost", guiActive = false)]
         public string D_RefrCost = "???";
 
@@ -152,7 +155,7 @@ namespace RealActiveRadiator
                     double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy);
                     excessHeat /= (double)(radCount + cooledParts);
                     double val = Math.Min(rad.EnergyCap - rad.Energy, _maxCryoEnergyTransfer);
-                    double liftedHeatFlux = Math.Min(val, excessHeat) * Math.Min(1.0, this.energyTransferScale);
+                    double liftedHeatFlux = Math.Min(val, excessHeat) * Math.Min(1.0, cryoEnergyTransferScale);
 
                     refrigerationCost += Math.Min(maxCryoElectricCost, liftedHeatFlux / coolingEfficiency);
                 }
@@ -184,6 +187,7 @@ namespace RealActiveRadiator
             for (int j = 0; j < cooledParts; j++)
             {
                 RadiatorData radiatorData = this.coolParts[j];
+                bool useHeatPump = radiatorData.Part.temperature < base.part.skinTemperature;
                 coolingEfficiency = CoolingEfficiency(coolParts[j].Part.temperature, base.part.skinTemperature);
                 double _maxCryoEnergyTransfer = maxCryoElectricCost * coolingEfficiency;
                 double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy);
@@ -195,9 +199,9 @@ namespace RealActiveRadiator
                 {
                     this.D_XferBase = liftedHeatFlux.ToString();
                 }
-                liftedHeatFlux *= Math.Min(1.0, this.energyTransferScale);
+                liftedHeatFlux *= Math.Min(1.0, useHeatPump ? cryoEnergyTransferScale : this.energyTransferScale);
 
-                if (radiatorData.Part.temperature < base.part.skinTemperature)
+                if (useHeatPump)
                     liftedHeatFlux *= refrigerationThrottle;
                 
                 if (liftedHeatFlux > 0.0 && !base.vessel.IsFirstFrame())
