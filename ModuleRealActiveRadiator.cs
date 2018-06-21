@@ -151,13 +151,15 @@ namespace RealActiveRadiator
             this.nonRadiatorParts.Clear();
             this.compensatedParts.Clear();
             int count = base.vessel.parts.Count;
-            ModuleRealActiveRadiator radPart;
+            ModuleActiveRadiator radPart;
             while (count-- > 0)
             {
                 Part part = base.vessel.parts[count];
-                if (radPart = (ModuleRealActiveRadiator)part.FindModuleImplementing<ModuleActiveRadiator>())
+                if (radPart = part.FindModuleImplementing<ModuleActiveRadiator>())
                 {
-                    if (!radPart.cooledByOtherRadiators)
+                    // There can be other mods that inherit from ModuleActiveRadiator type.
+                    // Need to ensure that the found part is actually a RealActiveRadiator.
+                    if (radPart is ModuleRealActiveRadiator && !((ModuleRealActiveRadiator)radPart).cooledByOtherRadiators)
                         this.activeRadiatorParts.Add(part);
                 }
                 else
