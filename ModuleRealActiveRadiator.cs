@@ -26,6 +26,9 @@ namespace RealActiveRadiator
         [KSPField]
         protected bool cooledByOtherRadiators = false;
 
+        //[KSPField]
+        //protected double coolTemperatureThreshold = 297.6;
+
         protected static string cacheAutoLOC_232071;
         protected static string cacheAutoLOC_232067;
         protected static string cacheAutoLOC_232036;
@@ -38,6 +41,7 @@ namespace RealActiveRadiator
         protected double baseElectricRate = 0;
         protected double refrigerationThrottle = 1;
         protected BaseField Dfld_RefrCost;
+        protected List<Part> compensatedParts = new List<Part> ();
 
 		public ModuleRealActiveRadiator () : base()
 		{
@@ -115,21 +119,8 @@ namespace RealActiveRadiator
             stringBuilder.Append(Localizer.Format("#autoLOC_232060", new string[] {
                 stringBuilder2.ToString ()
             }));
-            if (this.overcoolFactor < 1.0)
             {
-                if (this.overcoolFactor > 0.0)
-                {
-                    stringBuilder.Append(Localizer.Format("#autoLOC_232065", new string[] {
-                        (1.0 / this.overcoolFactor).ToString ("G2")
-                    }) + "\n");
-                }
-                else
-                {
-                    
-                }
-                {
-                    stringBuilder.Append(ModuleRealActiveRadiator.cacheAutoLOC_232067);
-                }
+                stringBuilder.Append(ModuleRealActiveRadiator.cacheAutoLOC_232067);
             }
             if (this.parentCoolingOnly)
             {
@@ -158,6 +149,7 @@ namespace RealActiveRadiator
             }
             this.activeRadiatorParts.Clear();
             this.nonRadiatorParts.Clear();
+            this.compensatedParts.Clear();
             int count = base.vessel.parts.Count;
             ModuleRealActiveRadiator radPart;
             while (count-- > 0)
@@ -171,31 +163,27 @@ namespace RealActiveRadiator
                 else
                 {
                     this.nonRadiatorParts.Add(part);
+                    if (part.Modules.Contains("ModuleFuelTanks"))
+                    {
+                        this.compensatedParts.Add(part);
+                    }
                 }
             }
             this.partCachesDirty = false;
         }
 
-
-
-        protected void AdjustResourceRates()
-        {
-            // How to handle this... walk through reshandler resources and adjust EC if present?
-            // maybe later do something more robust such as having a list of resources to adjust here along with rates...
-
-        }
-
         //<summary>
         // Returns the cooling efficiency taking into account both Carnot and efficiency % of Carnot of the cooler.
+        // This ONLY is valid for conditions where refrigeration is happening. Otherwise stock radiator conditions apply.
         //</summary>
         public double CoolingEfficiency(double coolingTemp, double hotTemp)
         {
-            return coolingTemp / (hotTemp - coolingTemp) * cryoCoolerEfficiency.Evaluate((float)coolingTemp);
+            return Math.Max(coolingTemp / (hotTemp - coolingTemp) * cryoCoolerEfficiency.Evaluate((float)coolingTemp), 0);
         }
 
 
 
-        protected override void InternalCooling(RadiatorData rad, int radCount)
+        protected override void InternalCooling(RadiatorData thisRadiator, int radCount)
         {
             if (!base.vessel.IsFirstFrame())
             {
@@ -229,15 +217,11 @@ namespace RealActiveRadiator
                     }
                     if (flag)
                     {
-                        double num = base.part.temperature * this.overcoolFactor;
-                        if (part2.temperature > num)
+                        RadiatorData thermalData = RadiatorUtilities.GetThermalData(part2);
+                        double energyDifference = thermalData.Energy - thermalData.MaxEnergy;
+                        if (energyDifference > 0.0)
                         {
-                            RadiatorData thermalData = RadiatorUtilities.GetThermalData(part2);
-                            double num2 = thermalData.Energy - thermalData.MaxEnergy;
-                            if (num2 > 0.0)
-                            {
-                                this.coolParts.Add(thermalData);
-                            }
+                            this.coolParts.Add(thermalData);
                         }
                     }
                 }
@@ -245,25 +229,41 @@ namespace RealActiveRadiator
                 int cooledParts = this.coolParts.Count;
                 // Would have liked to do this part as coolParts was being built so the list doesn't have to be walked through twice
                 // but I don't know the amount of flux until after it's done being built - so if I want to throttle refrigeration I have to do this.
-                //refrigerationThrottle = 1; // experimented with making this persist between frames but my code isn't working for independently throttled radiators.
                 for (int i = 0; i < cooledParts; i++)
                 {
                     if (coolParts[i].Part.temperature < base.part.skinTemperature)
                     {
-                        RadiatorData radiatorData = this.coolParts[i];
+                        RadiatorData partThermalData = this.coolParts[i];
                         coolingEfficiency = CoolingEfficiency(coolParts[i].Part.temperature, base.part.skinTemperature);
                         double _maxCryoEnergyTransfer = maxCryoElectricCost * coolingEfficiency;
-                        double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy);
+                        double excessHeat = (partThermalData.Energy - partThermalData.MaxEnergy);
                         excessHeat /= (double)(radCount + cooledParts);
-                        double val = Math.Min(rad.EnergyCap - rad.Energy, _maxCryoEnergyTransfer);
+                        double val = Math.Min(Math.Max(0, thisRadiator.EnergyCap - thisRadiator.Energy), _maxCryoEnergyTransfer);
                         double liftedHeatFlux = Math.Min(val, excessHeat) * Math.Min(1.0, cryoEnergyTransferScale) * refrigerationThrottle;
 
                         refrigerationCost += Math.Min(maxCryoElectricCost, liftedHeatFlux / coolingEfficiency);
                     }
                 }
+                for (int i = 0; i < this.compensatedParts.Count; i++)
+                {
+                    Part part = compensatedParts[i];
+                    if (!(part.temperature < part.maxTemp * part.radiatorMax))
+                    {
+                        double conductionFlux = part.thermalConductionFlux + part.skinToInternalFlux;
+
+                        if (conductionFlux > 0 && part.temperature < base.part.skinTemperature)
+                        {
+                            coolingEfficiency = CoolingEfficiency(part.temperature, base.part.skinTemperature);
+                            conductionFlux = Math.Min(conductionFlux, maxCryoElectricCost * coolingEfficiency);
+                            conductionFlux *= refrigerationThrottle;
+                            refrigerationCost += conductionFlux / coolingEfficiency;
+                        }
+                    }
+                }
+
                 if (electricResourceIndex >= 0)
                 {
-                    this.resHandler.inputResources[electricResourceIndex].rate = baseElectricRate + refrigerationCost;
+                    this.resHandler.inputResources[electricResourceIndex].rate = baseElectricRate + refrigerationCost; 
 
                     //double powerAvailability = this.resHandler.UpdateModuleResourceInputs(ref this.status, radCount, 0.9, false, false, true);
                     double ECAmount, ECMaxAmount;
@@ -280,14 +280,14 @@ namespace RealActiveRadiator
                     else if (refrigerationThrottle < 1.0)
                     {
                         // Try to increase the throttle if power reserves have increased to more than 10x what would be required.
-                        if (powerAvailability >= 10)
+                        if (powerAvailability >= 10 * refrigerationCost)
                         {
                             refrigerationThrottle += 0.001;
                             refrigerationCost *= refrigerationThrottle;
                             this.resHandler.inputResources[electricResourceIndex].rate = baseElectricRate + (refrigerationCost);
                         }
                     }
-                    this.resHandler.UpdateModuleResourceInputs(ref this.status, 1, 0.9, false, false, true);
+                    //this.resHandler.UpdateModuleResourceInputs(ref this.status, 1, 0.9, false, false, true);
 
                     refrigerationThrottle = Math.Min(refrigerationThrottle, 1);
 
@@ -313,7 +313,7 @@ namespace RealActiveRadiator
                     double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy);
                     excessHeat /= (double)(radCount + cooledParts);
                     double _maxEnergyTransfer = radiatorData.Part.temperature >= base.part.skinTemperature ? this.maxEnergyTransfer : _maxCryoEnergyTransfer;
-                    double val = Math.Min(rad.EnergyCap - rad.Energy, _maxEnergyTransfer);
+                    double val = Math.Min(Math.Max(0, thisRadiator.EnergyCap - thisRadiator.Energy), _maxEnergyTransfer);
                     double liftedHeatFlux = Math.Min(val, excessHeat);
                     if (this.Dfld_XferBase.guiActive)
                     {
@@ -340,6 +340,21 @@ namespace RealActiveRadiator
                     if (this.Dfld_XferFin.guiActive)
                     {
                         this.D_XferFin = liftedHeatFlux.ToString();
+                    }
+                }
+                for (int i = 0; i < this.compensatedParts.Count; i++)
+                {
+                    Part part = this.compensatedParts[i];
+                    if (!(part.temperature < Math.Round(part.maxTemp * part.radiatorMax * 0.99, 4)))
+                    {
+                        double conductionFlux = part.thermalConductionFlux + part.skinToInternalFlux;
+                        if (conductionFlux > 0)
+                        {
+                            double compensatedFlux = Math.Min(conductionFlux, CoolingEfficiency(part.temperature, this.part.skinTemperature) * maxCryoElectricCost) * refrigerationThrottle / radCount;
+
+                            part.AddThermalFlux(-compensatedFlux);
+                            base.part.AddThermalFlux(compensatedFlux);
+                        }
                     }
                 }
             }
