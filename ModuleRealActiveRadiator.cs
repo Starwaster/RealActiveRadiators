@@ -271,7 +271,7 @@ namespace RealActiveRadiator
                     double ECAmount, ECMaxAmount;
                     this.part.GetConnectedResourceTotals(ECID, PartResourceLibrary.GetDefaultFlowMode(ECID), out ECAmount, out ECMaxAmount, true);
                     // if the craft has mixed radiator types then availability calculation may be wrong
-                    double powerAvailability = ECAmount / (refrigerationCost * radCount);
+                    double powerAvailability = Math.Max(0, ECAmount / (refrigerationCost * radCount));
                     if (powerAvailability < 1.0)
                     {
                         // Looks like radiator count can include inactive radiators so this could throttle cooling down more than intended.
