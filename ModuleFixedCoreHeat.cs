@@ -15,6 +15,11 @@ namespace AdvancedActiveRadiators
         {
         }
 
+        protected override double GetDeltaTime()
+        {
+            return (double)TimeWarp.fixedDeltaTime;
+            //return base.GetDeltaTime();
+        }
 
         protected override void MoveCoreEnergyToRadiators(double excess, double deltaTime)
         {
