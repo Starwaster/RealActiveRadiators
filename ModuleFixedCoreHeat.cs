@@ -11,14 +11,47 @@ namespace AdvancedActiveRadiators
 {
     public class ModuleFixedCoreHeat : ModuleCoreHeat
     {
+
+        private double coreHeatDelta = 0;
+        protected BaseField Dfld_coreHeatDelta;
+
+        [KSPField(guiName = "Core Flux", guiActive = true)]
+        public string D_coreHeatDelta = "???";
+
         public ModuleFixedCoreHeat()
         {
+        }
+
+        public override void Start()
+        {
+            base.Start();
+            this.Dfld_coreHeatDelta = Fields["D_coreHeatDelta"];
+        }
+
+        protected override void CheckDebugFields()
+        {
+            base.CheckDebugFields();
+            Dfld_coreHeatDelta.guiActive = PhysicsGlobals.ThermalDataDisplay;
         }
 
         protected override double GetDeltaTime()
         {
             return (double)TimeWarp.fixedDeltaTime;
             //return base.GetDeltaTime();
+        }
+
+        public override void AddEnergyToCore(double energy)
+        {
+            coreHeatDelta += energy;
+            base.AddEnergyToCore(energy);
+        }
+
+        public override void FixedUpdate()
+        {
+            this.coreHeatDelta = 0;
+            base.FixedUpdate();
+            D_coreHeatDelta = this.coreHeatDelta.ToString("F4");
+
         }
 
         protected override void MoveCoreEnergyToRadiators(double excess, double deltaTime)
