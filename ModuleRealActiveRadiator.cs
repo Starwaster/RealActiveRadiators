@@ -233,10 +233,10 @@ namespace RealActiveRadiator
                 // but I don't know the amount of flux until after it's done being built - so if I want to throttle refrigeration I have to do this.
                 for (int i = 0; i < cooledParts; i++)
                 {
-                    if (coolParts[i].Part.temperature < base.part.skinTemperature)
+                    if (coolParts[i].Part.temperature < base.part.temperature)
                     {
                         RadiatorData partThermalData = this.coolParts[i];
-                        coolingEfficiency = CoolingEfficiency(coolParts[i].Part.temperature, base.part.skinTemperature);
+                        coolingEfficiency = CoolingEfficiency(coolParts[i].Part.temperature, base.part.temperature);
                         double _maxCryoEnergyTransfer = maxCryoElectricCost * coolingEfficiency;
                         double excessHeat = (partThermalData.Energy - partThermalData.MaxEnergy);
                         excessHeat /= (double)(radCount + cooledParts);
@@ -253,9 +253,9 @@ namespace RealActiveRadiator
                     {
                         double conductionFlux = part.thermalConductionFlux + part.skinToInternalFlux;
 
-                        if (conductionFlux > 0 && part.temperature < base.part.skinTemperature)
+                        if (conductionFlux > 0 && part.temperature < base.part.temperature)
                         {
-                            coolingEfficiency = CoolingEfficiency(part.temperature, base.part.skinTemperature);
+                            coolingEfficiency = CoolingEfficiency(part.temperature, base.part.temperature);
                             conductionFlux = Math.Min(conductionFlux, maxCryoElectricCost * coolingEfficiency);
                             conductionFlux *= refrigerationThrottle;
                             refrigerationCost += conductionFlux / coolingEfficiency;
@@ -309,12 +309,12 @@ namespace RealActiveRadiator
                 for (int j = 0; j < cooledParts; j++)
                 {
                     RadiatorData radiatorData = this.coolParts[j];
-                    bool useHeatPump = radiatorData.Part.temperature < base.part.skinTemperature;
-                    coolingEfficiency = CoolingEfficiency(coolParts[j].Part.temperature, base.part.skinTemperature);
+                    bool useHeatPump = radiatorData.Part.temperature < base.part.temperature;
+                    coolingEfficiency = CoolingEfficiency(coolParts[j].Part.temperature, base.part.temperature);
                     double _maxCryoEnergyTransfer = maxCryoElectricCost * coolingEfficiency;
                     double excessHeat = (radiatorData.Energy - radiatorData.MaxEnergy);
                     excessHeat /= (double)(radCount + cooledParts);
-                    double _maxEnergyTransfer = radiatorData.Part.temperature >= base.part.skinTemperature ? this.maxEnergyTransfer : _maxCryoEnergyTransfer;
+                    double _maxEnergyTransfer = radiatorData.Part.temperature >= base.part.temperature ? this.maxEnergyTransfer : _maxCryoEnergyTransfer;
                     double val = Math.Min(Math.Max(0, thisRadiator.EnergyCap - thisRadiator.Energy), _maxEnergyTransfer);
                     double liftedHeatFlux = Math.Min(val, excessHeat);
                     if (this.Dfld_XferBase.guiActive)
@@ -347,12 +347,12 @@ namespace RealActiveRadiator
                 for (int i = 0; i < this.compensatedParts.Count; i++)
                 {
                     Part part = this.compensatedParts[i];
-                    if (!(part.temperature < Math.Round(part.maxTemp * part.radiatorMax * 0.99, 4)))
+                    if (!(part.temperature < Math.Round(part.maxTemp * part.radiatorMax, 4)))
                     {
                         double conductionFlux = part.thermalConductionFlux + part.skinToInternalFlux;
                         if (conductionFlux > 0)
                         {
-                            double compensatedFlux = Math.Min(conductionFlux, CoolingEfficiency(part.temperature, this.part.skinTemperature) * maxCryoElectricCost) * refrigerationThrottle / radCount;
+                            double compensatedFlux = Math.Min(conductionFlux, CoolingEfficiency(part.temperature, this.part.temperature) * maxCryoElectricCost) * refrigerationThrottle / radCount;
 
                             part.AddThermalFlux(-compensatedFlux);
                             base.part.AddThermalFlux(compensatedFlux);
