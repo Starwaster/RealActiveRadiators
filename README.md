@@ -3,7 +3,7 @@ Realistic version of KSP stock ModuleActiveRadiator class.
 Has the following features:
 
 * Can always cool parts regardles of ambient temperature. (unlike real radiators, stock KSP radiators will not pull heat if the ambient temperature is hotter than the radiator's temperature)
-* If the cooled part is colder than the radiator's skin temperature then an added refrigeration cost (in ElectricCharge) will be incurred.
+* If the cooled part is colder than the radiator's temperature then an added refrigeration cost (in ElectricCharge) will be incurred.
 
 Refrigeration cost requires that the radiator config has an ElectricCharge RESOURCE input. The actual cost is static and determined by the maxCryoElectricCost field and a maximum cooling rate will be determined based on the formula: electric cost * coolingTemp / (radiator temp - coolingTemp) * cryo cooler efficiency (for the cool temperature)
 
